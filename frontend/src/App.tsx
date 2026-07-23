@@ -71,16 +71,15 @@ export default function App() {
       if (!drag.dragging) return
       const dx = e.screenX - drag.startX
       const dy = e.screenY - drag.startY
+      drag.startX = e.screenX
+      drag.startY = e.screenY
       if ((window as any).__moveBy) {
         ;(window as any).__moveBy(dx, dy)
       }
     }
-    const onMouseUp = (e: MouseEvent) => {
+    const onMouseUp = () => {
       const drag = dragRef.current
-      if (!drag.dragging) return
       drag.dragging = false
-      drag.startX = e.screenX
-      drag.startY = e.screenY
     }
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
