@@ -23,8 +23,8 @@ const (
 	HWND_TOPMOST = ^uintptr(0)
 	SWP_SHOWWINDOW = 0x0040
 
-	animSteps  = 45
-	animDelay  = 10 * time.Millisecond
+	animSteps  = 16
+	animDelay  = 8 * time.Millisecond
 	pillW = 64
 	pillH = 36
 	marginRight = 16
