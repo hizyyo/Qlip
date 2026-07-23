@@ -9,12 +9,15 @@ var (
 	procShowWindow     = user32Toggle.NewProc("ShowWindow")
 	procSetForegroundWindow = user32Toggle.NewProc("SetForegroundWindow")
 	procIsWindowVisible = user32Toggle.NewProc("IsWindowVisible")
+	procBringWindowToTop = user32Toggle.NewProc("BringWindowToTop")
 )
 
 const (
 	SW_HIDE    = 0
-	SW_SHOW    = 5
 	SW_RESTORE = 9
+
+	HWND_TOPMOST = ^uintptr(1)
+	SWP_SHOWWINDOW = 0x0040
 )
 
 type Toggle struct {
@@ -30,7 +33,9 @@ func (t *Toggle) Show() {
 		return
 	}
 	procShowWindow.Call(t.hwnd, SW_RESTORE)
+	procSetWindowPos.Call(t.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE|SWP_NOSIZE|SWP_SHOWWINDOW)
 	procSetForegroundWindow.Call(t.hwnd)
+	procBringWindowToTop.Call(t.hwnd)
 }
 
 func (t *Toggle) Hide() {

@@ -37,6 +37,7 @@ const (
 	WS_EX_TOOLWINDOW = 0x00000080
 	WS_EX_APPWINDOW  = 0x00040000
 	WS_EX_LAYERED    = 0x00080000
+	WS_EX_TOPMOST    = 0x00000008
 
 	SWP_FRAMECHANGED = 0x0020
 	SWP_NOMOVE       = 0x0002
@@ -89,7 +90,7 @@ func ApplyFrameless(hwnd uintptr, width, height int) {
 	procSetWindowLongW.Call(hwnd, ^uintptr(15), newStyle)
 
 	exStyle, _, _ := procGetWindowLongW.Call(hwnd, ^uintptr(19))
-	newEx := exStyle | WS_EX_TOOLWINDOW
+	newEx := exStyle | WS_EX_TOOLWINDOW | WS_EX_TOPMOST
 	newEx = newEx & ^uintptr(WS_EX_APPWINDOW)
 	procSetWindowLongW.Call(hwnd, ^uintptr(19), newEx)
 
