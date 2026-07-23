@@ -13,8 +13,6 @@ var (
 
 const (
 	MOD_ALT = 0x0001
-	VK_MENU = 0x12
-	VK_V    = 0x56
 )
 
 type Hotkey struct {
@@ -47,8 +45,8 @@ func (h *Hotkey) poll(mod, vk int) {
 		}
 
 		modDown := false
-		if mod == 0x0001 {
-			state, _, _ := procGetAsyncKeyState.Call(VK_MENU)
+		if mod == MOD_ALT {
+			state, _, _ := procGetAsyncKeyState.Call(0x12)
 			modDown = state&0x8000 != 0
 		}
 

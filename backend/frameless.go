@@ -2,59 +2,61 @@ package backend
 
 import (
 	"syscall"
-	"time"
 	"unsafe"
 )
 
 var (
-	user32Frame   = syscall.NewLazyDLL("user32.dll")
-	gdi32Frame    = syscall.NewLazyDLL("gdi32.dll")
-	dwmapiFrame   = syscall.NewLazyDLL("dwmapi.dll")
-	procGetWindowLongW    = user32Frame.NewProc("GetWindowLongW")
-	procSetWindowLongW    = user32Frame.NewProc("SetWindowLongW")
-	procSetWindowPos      = user32Frame.NewProc("SetWindowPos")
-	procGetWindowRect     = user32Frame.NewProc("GetWindowRect")
-	procGetClientRect     = user32Frame.NewProc("GetClientRect")
-	procSetWindowRgn      = user32Frame.NewProc("SetWindowRgn")
-	procCreateRectRgn     = gdi32Frame.NewProc("CreateRectRgn")
-	procMoveWindow        = user32Frame.NewProc("MoveWindow")
-	procDwmSetWindowAttribute = dwmapiFrame.NewProc("DwmSetWindowAttribute")
+	user32Frame    = syscall.NewLazyDLL("user32.dll")
+	gdi32Frame     = syscall.NewLazyDLL("gdi32.dll")
+	dwmapi         = syscall.NewLazyDLL("dwmapi.dll")
+	procGetWindowLongW        = user32Frame.NewProc("GetWindowLongW")
+	procSetWindowLongW        = user32Frame.NewProc("SetWindowLongW")
+	procSetWindowPos          = user32Frame.NewProc("SetWindowPos")
+	procGetClientRect         = user32Frame.NewProc("GetClientRect")
+	procSetWindowRgn          = user32Frame.NewProc("SetWindowRgn")
+	procCreateRectRgn         = gdi32Frame.NewProc("CreateRectRgn")
+	procMoveWindow            = user32Frame.NewProc("MoveWindow")
+	procGetWindowRect         = user32Frame.NewProc("GetWindowRect")
+	procSetLayeredWindowAttributes = user32Frame.NewProc("SetLayeredWindowAttributes")
 	procSetWindowCompositionAttribute = user32Frame.NewProc("SetWindowCompositionAttribute")
-	procDwmExtendFrameIntoClientArea  = dwmapiFrame.NewProc("DwmExtendFrameIntoClientArea")
+	procDwmSetWindowAttribute = dwmapi.NewProc("DwmSetWindowAttribute")
+	procDwmExtendFrameIntoClientArea = dwmapi.NewProc("DwmExtendFrameIntoClientArea")
 )
 
 const (
-	WS_CAPTION      = 0x00C00000
-	WS_BORDER       = 0x00800000
-	WS_DLGFRAME     = 0x00400000
-	WS_THICKFRAME   = 0x00040000
+	WS_CAPTION       = 0x00C00000
+	WS_BORDER        = 0x00800000
+	WS_DLGFRAME      = 0x00400000
+	WS_THICKFRAME    = 0x00040000
 	WS_SYSMENU       = 0x00080000
 	WS_MINIMIZEBOX   = 0x00020000
 	WS_MAXIMIZEBOX   = 0x00010000
+	WS_POPUP         = 0x80000000
+	WS_VISIBLE       = 0x10000000
 
-	WS_EX_TOOLWINDOW   = 0x00000080
-	WS_EX_APPWINDOW    = 0x00040000
-	WS_EX_WINDOWEDGE   = 0x00000100
-	WS_EX_CLIENTEDGE    = 0x00000200
-	WS_EX_STATICEDGE    = 0x00020000
-	WS_EX_LAYERED       = 0x00080000
-	WS_EX_TRANSPARENT   = 0x00000020
+	WS_EX_TOOLWINDOW = 0x00000080
+	WS_EX_APPWINDOW  = 0x00040000
+	WS_EX_LAYERED    = 0x00080000
 
 	SWP_FRAMECHANGED = 0x0020
 	SWP_NOMOVE       = 0x0002
 	SWP_NOSIZE       = 0x0001
 	SWP_NOZORDER     = 0x0004
 	SWP_NOACTIVATE   = 0x0010
+
+	DWMWA_NCRENDERING_POLICY = 2
+	DWMNCRP_DISABLED         = 1
+	DWMWA_BORDER_COLOR       = 34
+	DWMWA_CAPTION_COLOR      = 35
+	DWMWA_SYSTEMBACKDROP_TYPE = 38
+	DWMSBT_MAINWINDOW        = 1
+	DWMSBT_TABBEDWINDOW      = 2
+	DWMSBT_ACRYLICBLUR       = 3
 )
 
-var (
-	gwlStyleVal   = uintptr(^uint32(15))
-	gwlExStyleVal = uintptr(^uint32(19))
-
-	DWMWA_SYSTEMBACKDROP_TYPE = uintptr(38)
-	DWMSBT_ACRYLIC            = uintptr(4)
-	DWMSBT_MAINWINDOW         = uintptr(2)
-)
+type MARGINS struct {
+	left, right, top, bottom int32
+}
 
 type RECT struct {
 	left, top, right, bottom int32
@@ -73,99 +75,90 @@ type WINCOMPATTRDATA struct {
 	DataSize  uint32
 }
 
-func SetFramelessOverlay(title string) {
-	go func() {
-		time.Sleep(200 * time.Millisecond)
-
-		utf16 := syscall.StringToUTF16(title)
-		hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(&utf16[0])))
-		if hwnd == 0 {
-			return
-		}
-
-		var wr RECT
-		procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&wr)))
-		winW := uintptr(wr.right - wr.left)
-		winH := uintptr(wr.bottom - wr.top)
-
-		style, _, _ := procGetWindowLongW.Call(hwnd, gwlStyleVal)
-		removeStyle := uintptr(WS_CAPTION | WS_BORDER | WS_DLGFRAME | WS_THICKFRAME |
-			WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)
-		procSetWindowLongW.Call(hwnd, gwlStyleVal, style & ^removeStyle)
-
-		exStyle, _, _ := procGetWindowLongW.Call(hwnd, gwlExStyleVal)
-		newEx := exStyle | WS_EX_TOOLWINDOW | WS_EX_LAYERED
-		newEx = newEx & ^uintptr(WS_EX_APPWINDOW | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE)
-		procSetWindowLongW.Call(hwnd, gwlExStyleVal, newEx)
-
-		procSetWindowPos.Call(hwnd, 0, 0, 0, winW, winH,
-			SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE)
-
-		var cr RECT
-		procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr)))
-		cw := uintptr(cr.right - cr.left)
-		ch := uintptr(cr.bottom - cr.top)
-		hRgn, _, _ := procCreateRectRgn.Call(0, 0, cw, ch)
-		if hRgn != 0 {
-			procSetWindowRgn.Call(hwnd, hRgn, 1)
-		}
-
-		enableAcrylicDWM(hwnd)
-
-		procShowWindow.Call(hwnd, SW_SHOW)
-	}()
-}
-
-func enableAcrylicDWM(hwnd uintptr) {
-	var attr uint32 = 4
-	if procDwmSetWindowAttribute.Find() == nil {
-		ret, _, _ := procDwmSetWindowAttribute.Call(
-			hwnd, 38,
-			uintptr(unsafe.Pointer(&attr)),
-			4,
-		)
-		if ret == 0 {
-			return
-		}
+func ApplyFrameless(hwnd uintptr, width, height int) {
+	if hwnd == 0 {
+		return
 	}
 
-	if procSetWindowCompositionAttribute.Find() == nil {
+	style, _, _ := procGetWindowLongW.Call(hwnd, ^uintptr(15))
+
+	removeStyle := WS_CAPTION | WS_BORDER | WS_DLGFRAME | WS_THICKFRAME |
+		WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX
+	newStyle := style & ^uintptr(removeStyle)
+	newStyle |= WS_POPUP
+	procSetWindowLongW.Call(hwnd, ^uintptr(15), newStyle)
+
+	exStyle, _, _ := procGetWindowLongW.Call(hwnd, ^uintptr(19))
+	newEx := exStyle | WS_EX_TOOLWINDOW
+	newEx = newEx & ^uintptr(WS_EX_APPWINDOW)
+	procSetWindowLongW.Call(hwnd, ^uintptr(19), newEx)
+
+	procSetWindowPos.Call(hwnd, 0, 0, 0, uintptr(width), uintptr(height),
+		SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE)
+
+	var cr RECT
+	procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&cr)))
+	cw := cr.right - cr.left
+	ch := cr.bottom - cr.top
+	hRgn, _, _ := procCreateRectRgn.Call(0, 0, uintptr(cw), uintptr(ch))
+	if hRgn != 0 {
+		procSetWindowRgn.Call(hwnd, hRgn, 1)
+	}
+
+	tryDwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, DWMNCRP_DISABLED, 4)
+
+	margins := MARGINS{left: -1, right: -1, top: -1, bottom: -1}
+	procDwmExtendFrameIntoClientArea.Call(hwnd, uintptr(unsafe.Pointer(&margins)))
+
+	tryDwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, 0x00000000, 4)
+	tryDwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, 0x00000000, 4)
+
+	enableAcrylic(hwnd)
+	makeLayeredTransparent(hwnd)
+}
+
+func tryDwmSetWindowAttribute(hwnd uintptr, attr, value, size uintptr) {
+	if procDwmSetWindowAttribute.Find() != nil {
+		return
+	}
+	procDwmSetWindowAttribute.Call(hwnd, attr, uintptr(unsafe.Pointer(&value)), size)
+}
+
+func enableAcrylic(hwnd uintptr) {
+	if procSetWindowCompositionAttribute.Find() != nil {
+		return
+	}
+
+	for _, attr := range []int32{19, 20} {
 		accent := ACCENTPOLICY{
 			AccentState:   4,
 			AccentFlags:   0,
-			GradientColor: 0x19000000,
+			GradientColor: 0x11000000,
 			AnimationID:   0,
 		}
 		data := WINCOMPATTRDATA{
-			Attribute:    19,
-			Data:         uintptr(unsafe.Pointer(&accent)),
-			DataSize:     uint32(unsafe.Sizeof(accent)),
+			Attribute: attr,
+			Data:      uintptr(unsafe.Pointer(&accent)),
+			DataSize:  uint32(unsafe.Sizeof(accent)),
 		}
-		ret, _, _ := procSetWindowCompositionAttribute.Call(hwnd, uintptr(unsafe.Pointer(&data)))
-		if ret != 0 {
-			return
-		}
-		accent.GradientColor = 0x1A000000
-		data.Attribute = 20
-		ret, _, _ = procSetWindowCompositionAttribute.Call(hwnd, uintptr(unsafe.Pointer(&data)))
-		if ret != 0 {
-			return
-		}
+		procSetWindowCompositionAttribute.Call(hwnd, uintptr(unsafe.Pointer(&data)))
 	}
 
-	if procDwmExtendFrameIntoClientArea.Find() == nil {
-		margins := [4]int32{-1, -1, -1, -1}
-		procDwmExtendFrameIntoClientArea.Call(hwnd, uintptr(unsafe.Pointer(&margins[0])))
-	}
+	tryDwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_ACRYLICBLUR, 4)
+}
+
+func makeLayeredTransparent(hwnd uintptr) {
+	exStyle, _, _ := procGetWindowLongW.Call(hwnd, ^uintptr(19))
+	procSetWindowLongW.Call(hwnd, ^uintptr(19), exStyle|WS_EX_LAYERED)
+
+	procSetLayeredWindowAttributes.Call(hwnd, 0, 240, 2)
 }
 
 type WindowMover struct {
 	hwnd uintptr
 }
 
-func NewWindowMover(title string) *WindowMover {
-	utf16 := syscall.StringToUTF16(title)
-	hwnd, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(&utf16[0])))
+func NewWindowMover(hwnd uintptr) *WindowMover {
 	return &WindowMover{hwnd: hwnd}
 }
 

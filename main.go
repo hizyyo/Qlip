@@ -51,9 +51,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	api.RegisterRoutes(mux)
-
-	fileServer := http.FileServer(http.FS(subFS))
-	mux.Handle("/", fileServer)
+	mux.Handle("/", http.FileServer(http.FS(subFS)))
 
 	httpServer := &http.Server{
 		Addr:    addr,
@@ -70,14 +68,16 @@ func main() {
 	w := webview.New(false)
 	defer w.Destroy()
 
+	hwnd := uintptr(w.Window())
+
 	w.SetTitle("ClipFlow")
 	w.SetSize(420, 600, webview.HintNone)
 	w.Navigate(fmt.Sprintf("http://%s", addr))
 
-	backend.SetFramelessOverlay("ClipFlow")
+	backend.ApplyFrameless(hwnd, 420, 600)
 
-	toggle := backend.NewToggle("ClipFlow")
-	mover := backend.NewWindowMover("ClipFlow")
+	toggle := backend.NewToggle(hwnd)
+	mover := backend.NewWindowMover(hwnd)
 
 	if err := w.Bind("__toggle", toggle.Toggle); err != nil {
 		log.Printf("Bind failed: %v", err)
