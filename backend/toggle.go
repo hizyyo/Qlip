@@ -27,7 +27,7 @@ const (
 	animDelay  = 10 * time.Millisecond
 	pillW = 64
 	pillH = 36
-	marginRight = 16
+	marginLeft = 16
 	marginTop   = 16
 )
 
@@ -40,13 +40,14 @@ type Toggle struct {
 }
 
 func NewToggle(hwnd uintptr) *Toggle {
-	x, y, w, h := getWindowRect(hwnd)
+	_, _, w, h := getWindowRect(hwnd)
+	sw, sh := getScreenSize()
 	return &Toggle{
 		hwnd:  hwnd,
 		fullW: w,
 		fullH: h,
-		fullX: x,
-		fullY: y,
+		fullX: sw/2 - w/2,
+		fullY: sh/2 - h/2,
 	}
 }
 
@@ -86,15 +87,18 @@ func (t *Toggle) AnimatedToggle() {
 	}
 }
 
+func (t *Toggle) pillPos() (int, int) {
+	_, sh := getScreenSize()
+	return marginLeft, sh/2 - pillH/2
+}
+
 func (t *Toggle) animatedHide() {
 	if t.hwnd == 0 {
 		return
 	}
 
 	x, y, w, h := getWindowRect(t.hwnd)
-	sw, _ := getScreenSize()
-	targetX := sw - pillW - marginRight
-	targetY := marginTop
+	targetX, targetY := t.pillPos()
 
 	for i := 1; i <= animSteps; i++ {
 		p := float64(i) / animSteps
@@ -122,9 +126,7 @@ func (t *Toggle) animatedShow() {
 		return
 	}
 
-	sw, _ := getScreenSize()
-	startX := sw - pillW - marginRight
-	startY := marginTop
+	startX, startY := t.pillPos()
 
 	procShowWindow.Call(t.hwnd, SW_SHOW)
 	procSetWindowPos.Call(t.hwnd, HWND_TOPMOST,
