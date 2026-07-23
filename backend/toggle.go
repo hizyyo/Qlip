@@ -23,11 +23,11 @@ const (
 	HWND_TOPMOST = ^uintptr(0)
 	SWP_SHOWWINDOW = 0x0040
 
-	animSteps  = 20
+	animSteps  = 45
 	animDelay  = 10 * time.Millisecond
 	pillW = 64
 	pillH = 36
-	marginLeft = 16
+	marginRight = 16
 	marginTop   = 16
 )
 
@@ -88,8 +88,8 @@ func (t *Toggle) AnimatedToggle() {
 }
 
 func (t *Toggle) pillPos() (int, int) {
-	_, sh := getScreenSize()
-	return marginLeft, sh/2 - pillH/2
+	sw, _ := getScreenSize()
+	return sw - pillW - marginRight, marginTop
 }
 
 func (t *Toggle) animatedHide() {
