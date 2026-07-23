@@ -1,0 +1,31 @@
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# Node
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build
+/dist/
+/cover.out
+
+# User data
+# (clipflow data is stored in %APPDATA%/clipflow/)
