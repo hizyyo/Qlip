@@ -8,6 +8,8 @@ interface HistoryItem {
   is_favorite: boolean
   created_at: string
   thumbnail?: string
+  category?: string
+  eval_result?: string
 }
 
 interface SearchResultItem extends HistoryItem {
@@ -25,15 +27,29 @@ interface Snippet {
 
 type Tab = 'all' | 'text' | 'image' | 'favorites' | 'snippets'
 
+const CATEGORY_ICONS: Record<string, string> = {
+  link: '🔗',
+  email: '✉',
+  phone: '📞',
+  json: '{ }',
+  code: '</>',
+  math: '=',
+  template: '{{ }}',
+}
+
 export default function App() {
   const [items, setItems] = useState<HistoryItem[]>([])
-const [isSearching, setIsSearching] = useState(false)
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [tab, setTab] = useState<Tab>('all')
   const [query, setQuery] = useState('')
   const [snippetTitle, setSnippetTitle] = useState('')
   const [snippetContent, setSnippetContent] = useState('')
   const [showSnippetForm, setShowSnippetForm] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [formatMenu, setFormatMenu] = useState<number | null>(null)
+  const [snippetVars, setSnippetVars] = useState<Record<string, string>>({})
+  const [zapMode, setZapMode] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -121,8 +137,20 @@ const [isSearching, setIsSearching] = useState(false)
       const res = await fetch(`/api/search?mode=fuzzy&q=${encodeURIComponent(q)}&limit=50`)
       const data = await res.json()
       setItems(data)
+      setZapMode(true)
     } catch {}
   }, [tab, fetchHistory])
+
+  const handleSearchKeyDown = useCallback(async (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && zapMode && items.length > 0) {
+      const first = items[0]
+      await copyToClipboard(first)
+      ;(window as any).__toggle?.()
+    }
+    if (e.key === 'Escape') {
+      ;(window as any).__toggle?.()
+    }
+  }, [zapMode, items])
 
   const toggleFavorite = useCallback(async (id: number) => {
     try {
@@ -146,13 +174,14 @@ const [isSearching, setIsSearching] = useState(false)
     } catch {}
   }, [])
 
-  const copyToClipboard = useCallback(async (item: HistoryItem) => {
+  const copyToClipboard = useCallback(async (item: HistoryItem, opts?: { plain?: boolean }) => {
     try {
-      const body: Record<string, string> = {}
+      const body: Record<string, any> = {}
       if (item.content_type === 'image' && item.thumbnail) {
         body.image_path = item.content
       } else if (item.content) {
         body.text = item.content
+        if (opts?.plain) body.plain = true
       } else {
         return
       }
@@ -162,6 +191,19 @@ const [isSearching, setIsSearching] = useState(false)
         body: JSON.stringify(body),
       })
     } catch {}
+  }, [])
+
+  const copyWithFormat = useCallback(async (item: HistoryItem, action: string) => {
+    try {
+      const res = await fetch(`/api/format?action=${action}&text=${encodeURIComponent(item.content)}`)
+      const data = await res.json()
+      await fetch(`/api/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: data.result }),
+      })
+    } catch {}
+    setFormatMenu(null)
   }, [])
 
   const addSnippet = useCallback(async () => {
@@ -178,6 +220,60 @@ const [isSearching, setIsSearching] = useState(false)
       fetchSnippets()
     } catch {}
   }, [snippetTitle, snippetContent, fetchSnippets])
+
+  const pasteSnippet = useCallback(async (content: string) => {
+    const vars: Record<string, string> = {}
+    const matches = content.match(/\{\{(\w+)\}\}/g)
+    if (matches) {
+      for (const m of matches) {
+        const key = m.slice(2, -2)
+        const val = snippetVars[key] || ''
+        vars[key] = val
+      }
+    }
+    try {
+      await fetch(`/api/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: content, vars }),
+      })
+    } catch {}
+  }, [snippetVars])
+
+  const pasteAllSelected = useCallback(async () => {
+    const selected = items.filter(i => selectedIds.has(i.id))
+    if (selected.length === 0) return
+    try {
+      await fetch(`/api/paste`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: selected.map(i => ({ text: i.content })),
+          delay: 200,
+        }),
+      })
+    } catch {}
+    setSelectedIds(new Set())
+  }, [items, selectedIds])
+
+  const toggleSelect = useCallback((id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const formatTime = (iso: string) => {
+    const d = new Date(iso)
+    const now = new Date()
+    const diff = now.getTime() - d.getTime()
+    if (diff < 60000) return 'just now'
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
+    return d.toLocaleDateString()
+  }
 
   const highlightText = (text: string, ranges?: [number, number][]) => {
     if (!ranges || ranges.length === 0 || !isSearching) {
@@ -204,25 +300,19 @@ const [isSearching, setIsSearching] = useState(false)
     )
   }
 
-  const formatTime = (iso: string) => {
-    const d = new Date(iso)
-    const now = new Date()
-    const diff = now.getTime() - d.getTime()
-    if (diff < 60000) return 'just now'
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-    return d.toLocaleDateString()
-  }
-
-  const copyText = useCallback(async (text: string) => {
-    try {
-      await fetch(`/api/copy`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      })
-    } catch {}
-  }, [])
+  const formatActions = [
+    { id: 'json', label: 'Format JSON' },
+    { id: 'json-minify', label: 'Minify JSON' },
+    { id: 'base64-encode', label: 'Base64 Encode' },
+    { id: 'base64-decode', label: 'Base64 Decode' },
+    { id: 'url-encode', label: 'URL Encode' },
+    { id: 'url-decode', label: 'URL Decode' },
+    { id: 'upper', label: 'UPPERCASE' },
+    { id: 'lower', label: 'lowercase' },
+    { id: 'trim', label: 'Trim Spaces' },
+    { id: 'lines-sort', label: 'Reverse Lines' },
+    { id: 'lines-uniq', label: 'Unique Lines' },
+  ]
 
   return (
     <div className="app">
@@ -250,54 +340,39 @@ const [isSearching, setIsSearching] = useState(false)
           ref={searchRef}
           type="text"
           className="search-input"
-          placeholder="Search clipboard..."
+          placeholder={zapMode ? "Search... (Enter = paste top result)" : "Search clipboard..."}
           value={query}
           onChange={e => handleSearch(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
         />
+        {zapMode && <span className="zap-badge">Zap</span>}
       </div>
 
       <div className="tabs">
-        <button className={`tab ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-            <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-            <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-          </svg>
-          All
-        </button>
-        <button className={`tab ${tab === 'text' ? 'active' : ''}`} onClick={() => setTab('text')}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-            <path d="M4 7V4h16v3" /><path d="M9 20h6" /><path d="M12 4v16" />
-          </svg>
-          Text
-        </button>
-        <button className={`tab ${tab === 'image' ? 'active' : ''}`} onClick={() => setTab('image')}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" />
-            <path d="m21 15-5-5L5 21" />
-          </svg>
-          Images
-        </button>
-        <button className={`tab ${tab === 'favorites' ? 'active' : ''}`} onClick={() => setTab('favorites')}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-          </svg>
-          Favorites
-        </button>
-        <button className={`tab ${tab === 'snippets' ? 'active' : ''}`} onClick={() => setTab('snippets')}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <line x1="16" y1="13" x2="8" y2="13" />
-            <line x1="16" y1="17" x2="8" y2="17" />
-          </svg>
-          Snippets
-        </button>
+        <button className={`tab ${tab === 'all' ? 'active' : ''}`} onClick={() => setTab('all')}>All</button>
+        <button className={`tab ${tab === 'text' ? 'active' : ''}`} onClick={() => setTab('text')}>Text</button>
+        <button className={`tab ${tab === 'image' ? 'active' : ''}`} onClick={() => setTab('image')}>Images</button>
+        <button className={`tab ${tab === 'favorites' ? 'active' : ''}`} onClick={() => setTab('favorites')}>★ Favorites</button>
+        <button className={`tab ${tab === 'snippets' ? 'active' : ''}`} onClick={() => setTab('snippets')}>Snippets</button>
       </div>
 
       <div className="content">
         {tab === 'snippets' ? (
           <>
+            <div className="snippet-vars">
+              <input
+                type="text"
+                placeholder="{{name}} value"
+                value={snippetVars.name || ''}
+                onChange={e => setSnippetVars(prev => ({ ...prev, name: e.target.value }))}
+              />
+              <input
+                type="text"
+                placeholder="{{date}} value"
+                value={snippetVars.date || ''}
+                onChange={e => setSnippetVars(prev => ({ ...prev, date: e.target.value }))}
+              />
+            </div>
             <button className="add-snippet-btn" onClick={() => setShowSnippetForm(!showSnippetForm)}>
               {showSnippetForm ? 'Cancel' : '+ New Snippet'}
             </button>
@@ -310,7 +385,7 @@ const [isSearching, setIsSearching] = useState(false)
                   onChange={e => setSnippetTitle(e.target.value)}
                 />
                 <textarea
-                  placeholder="Content"
+                  placeholder="Content (use {{name}}, {{date}}, {{time}})"
                   value={snippetContent}
                   onChange={e => setSnippetContent(e.target.value)}
                   rows={3}
@@ -319,49 +394,108 @@ const [isSearching, setIsSearching] = useState(false)
               </div>
             )}
             <div className="snippet-list">
-              {snippets.map(s => (
-                <div key={s.id} className="snippet-card" onClick={() => copyText(s.content)}>
-                  <div className="snippet-title">{s.title}</div>
-                  <div className="snippet-text">{s.content}</div>
-                  <button className="delete-btn" onClick={e => { e.stopPropagation(); deleteSnippet(s.id) }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                      <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="item-list">
-            {items.map(item => (
-              <div key={item.id} className={`item ${item.content_type === 'image' ? 'item-image' : ''}`} onClick={() => copyToClipboard(item)}>
-                {item.content_type === 'image' && item.thumbnail ? (
-                  <div className="item-image-wrapper">
-                    <img src={item.thumbnail} alt="clipboard image" className="item-image-preview" />
-                  </div>
-                ) : (
-                  <div className="item-content">{highlightText(item.content, (item as SearchResultItem).match_ranges)}</div>
-                )}
-                <div className="item-meta">
-                  <span className="item-time">{formatTime(item.created_at)}</span>
-                  <div className="item-actions">
-                    <button className={`fav-btn ${item.is_favorite ? 'active' : ''}`} onClick={e => { e.stopPropagation(); toggleFavorite(item.id) }}>
-                      <svg viewBox="0 0 24 24" fill={item.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" width="14" height="14">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                      </svg>
-                    </button>
-                    <button className="delete-btn" onClick={e => { e.stopPropagation(); deleteItem(item.id) }}>
+              {snippets.map(s => {
+                const hasVars = s.content.includes('{{')
+                return (
+                  <div key={s.id} className="snippet-card" onClick={() => pasteSnippet(s.content)}>
+                    <div className="snippet-title">{s.title}</div>
+                    <div className="snippet-text">{s.content}</div>
+                    {hasVars && <span className="snippet-vars-badge">Variables</span>}
+                    <button className="delete-btn" onClick={e => { e.stopPropagation(); deleteSnippet(s.id) }}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                         <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                       </svg>
                     </button>
                   </div>
-                </div>
+                )
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            {selectedIds.size > 0 && (
+              <div className="queue-bar">
+                <span className="queue-count">{selectedIds.size} selected</span>
+                <button className="paste-all-btn" onClick={pasteAllSelected}>
+                  Paste All ({selectedIds.size})
+                </button>
+                <button className="queue-clear" onClick={() => setSelectedIds(new Set())}>Clear</button>
               </div>
-            ))}
-            {items.length === 0 && <div className="empty">No items yet. Copy something to get started.</div>}
-          </div>
+            )}
+            <div className="item-list">
+              {items.map(item => (
+                <div key={item.id} className={`item ${item.content_type === 'image' ? 'item-image' : ''}`}>
+                  <div className="item-main" onClick={() => copyToClipboard(item)}>
+                    {item.content_type === 'image' && item.thumbnail ? (
+                      <div className="item-image-wrapper">
+                        <img src={item.thumbnail} alt="clipboard image" className="item-image-preview" />
+                      </div>
+                    ) : (
+                      <div className="item-content">
+                        {item.eval_result && <span className="math-badge">= {item.eval_result}</span>}
+                        {(item as SearchResultItem).match_ranges
+                          ? highlightText(item.content, (item as SearchResultItem).match_ranges)
+                          : <span className="item-content-text">{item.content}</span>
+                        }
+                      </div>
+                    )}
+                    <div className="item-meta">
+                      <div className="item-meta-left">
+                        {item.category && (
+                          <span className={`category-badge category-${item.category}`}>
+                            {CATEGORY_ICONS[item.category] || item.category}
+                          </span>
+                        )}
+                        <span className="item-time">{formatTime(item.created_at)}</span>
+                      </div>
+                      <div className="item-actions">
+                        <button
+                          className="select-btn"
+                          onClick={e => { e.stopPropagation(); toggleSelect(item.id) }}
+                        >
+                          {selectedIds.has(item.id) ? '✓' : '□'}
+                        </button>
+                        <button
+                          className="plain-btn"
+                          onClick={e => { e.stopPropagation(); copyToClipboard(item, { plain: true }) }}
+                          title="Paste as plain text"
+                        >
+                          Tt
+                        </button>
+                        <button
+                          className="format-btn"
+                          onClick={e => { e.stopPropagation(); setFormatMenu(formatMenu === item.id ? null : item.id) }}
+                          title="Format tools"
+                        >
+                          ▼
+                        </button>
+                        <button className={`fav-btn ${item.is_favorite ? 'active' : ''}`} onClick={e => { e.stopPropagation(); toggleFavorite(item.id) }}>
+                          {item.is_favorite ? '★' : '☆'}
+                        </button>
+                        <button className="delete-btn" onClick={e => { e.stopPropagation(); deleteItem(item.id) }}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                    {formatMenu === item.id && (
+                      <div className="format-menu">
+                        {formatActions.map(a => (
+                          <button
+                            key={a.id}
+                            className="format-menu-item"
+                            onClick={e => { e.stopPropagation(); copyWithFormat(item, a.id) }}
+                          >
+                            {a.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {items.length === 0 && <div className="empty">{isSearching ? 'No matches found' : 'No items yet. Copy something to get started.'}</div>}
+            </div>
+          </>
         )}
       </div>
     </div>
