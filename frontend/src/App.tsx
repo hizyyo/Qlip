@@ -63,6 +63,8 @@ export default function App() {
     drag.dragging = true
     drag.startX = e.screenX
     drag.startY = e.screenY
+    drag.winX = window.screenX
+    drag.winY = window.screenY
   }, [])
 
   useEffect(() => {

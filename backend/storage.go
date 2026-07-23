@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 type ClipboardItem struct {
@@ -125,13 +127,13 @@ func (s *Storage) Search(query string, limit int) []ClipboardItem {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	q := query
+	q := toLower(query)
 	var results []ClipboardItem
 	for _, item := range s.Items {
 		if len(results) >= limit {
 			break
 		}
-		if substringMatch(item.Content, q) {
+		if substringMatch(toLower(item.Content), q) {
 			results = append(results, item)
 		}
 	}
@@ -177,8 +179,8 @@ func fuzzyScore(query, text string) (float64, []int) {
 		return 0, nil
 	}
 
-	q := toLower(query)
-	t := toLower(text)
+	q := []rune(toLower(query))
+	t := []rune(toLower(text))
 
 	var positions []int
 	qi := 0
@@ -219,9 +221,9 @@ func fuzzyScore(query, text string) (float64, []int) {
 func allWordsMatch(query, text string) bool {
 	q := toLower(query)
 	t := toLower(text)
-	words := splitWords(q)
+	words := strings.Fields(q)
 	for _, word := range words {
-		if !substringMatch(t, word) {
+		if !strings.Contains(t, word) {
 			return false
 		}
 	}
@@ -233,49 +235,11 @@ func exactMatch(query, text string) bool {
 }
 
 func substringMatch(s, substr string) bool {
-	if len(s) < len(substr) {
-		return false
-	}
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(s, substr)
 }
 
 func toLower(s string) string {
-	b := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 32
-		}
-		b[i] = c
-	}
-	return string(b)
-}
-
-func splitWords(s string) []string {
-	var words []string
-	start := -1
-	for i := 0; i <= len(s); i++ {
-		if i < len(s) && isAlpha(s[i]) {
-			if start == -1 {
-				start = i
-			}
-		} else {
-			if start != -1 {
-				words = append(words, s[start:i])
-				start = -1
-			}
-		}
-	}
-	return words
-}
-
-func isAlpha(c byte) bool {
-	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+	return strings.Map(unicode.ToLower, s)
 }
 
 func toRanges(positions []int) [][2]int {
