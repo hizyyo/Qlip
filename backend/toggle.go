@@ -27,8 +27,7 @@ const (
 	animDelay  = 10 * time.Millisecond
 	pillW = 64
 	pillH = 36
-	marginRight = 16
-	marginTop   = 16
+	bottomMargin = 40
 )
 
 type Toggle struct {
@@ -47,7 +46,7 @@ func NewToggle(hwnd uintptr) *Toggle {
 		fullW: w,
 		fullH: h,
 		fullX: sw/2 - w/2,
-		fullY: sh/2 - h/2,
+		fullY: sh - h - bottomMargin,
 	}
 }
 
@@ -88,8 +87,8 @@ func (t *Toggle) AnimatedToggle() {
 }
 
 func (t *Toggle) pillPos() (int, int) {
-	sw, _ := getScreenSize()
-	return sw - pillW - marginRight, marginTop
+	sw, sh := getScreenSize()
+	return sw/2 - pillW/2, sh - pillH - bottomMargin
 }
 
 func (t *Toggle) animatedHide() {

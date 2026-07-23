@@ -63,8 +63,11 @@ export default function App() {
     drag.dragging = true
     drag.startX = e.screenX
     drag.startY = e.screenY
-    drag.winX = window.screenX
-    drag.winY = window.screenY
+    if ((window as any).__getWindowPos) {
+      const p = (window as any).__getWindowPos()
+      drag.winX = p.x
+      drag.winY = p.y
+    }
   }, [])
 
   useEffect(() => {
@@ -121,12 +124,12 @@ export default function App() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (tab !== 'snippets') {
+      if (tab !== 'snippets' && !isSearching) {
         fetchHistory(tab === 'favorites' ? 'favorites' : tab === 'text' ? 'text' : tab === 'image' ? 'image' : '')
       }
     }, 2000)
     return () => clearInterval(interval)
-  }, [tab, fetchHistory])
+  }, [tab, fetchHistory, isSearching])
 
   const handleSearch = useCallback(async (q: string) => {
     setQuery(q)

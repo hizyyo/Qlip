@@ -85,6 +85,9 @@ func main() {
 	if err := w.Bind("__moveWindow", mover.Move); err != nil {
 		log.Printf("Bind window move failed: %v", err)
 	}
+	if err := w.Bind("__getWindowPos", mover.GetPos); err != nil {
+		log.Printf("Bind get window pos failed: %v", err)
+	}
 
 	if err := w.Bind("__hideNow", toggle.Hide); err != nil {
 		log.Printf("Bind failed: %v", err)
