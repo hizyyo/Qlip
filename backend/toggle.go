@@ -16,7 +16,7 @@ const (
 	SW_HIDE    = 0
 	SW_RESTORE = 9
 
-	HWND_TOPMOST = ^uintptr(1)
+	HWND_TOPMOST = ^uintptr(0)
 	SWP_SHOWWINDOW = 0x0040
 )
 

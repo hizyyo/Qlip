@@ -53,7 +53,6 @@ func toHistoryItem(item ClipboardItem, imgDir string) HistoryItem {
 	if item.ContentType == "image" && item.Content != "" {
 		filename := filepath.Base(item.Content)
 		h.Thumbnail = "/images/" + filename
-		h.Content = ""
 	}
 	return h
 }

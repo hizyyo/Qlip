@@ -116,6 +116,22 @@ func ApplyFrameless(hwnd uintptr, width, height int) {
 
 	enableAcrylic(hwnd)
 	makeLayeredTransparent(hwnd)
+
+	setRoundCorners(hwnd)
+	makeTopmost(hwnd)
+}
+
+func makeTopmost(hwnd uintptr) {
+	procSetWindowPos.Call(hwnd, ^uintptr(0), 0, 0, 0, 0,
+		SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_FRAMECHANGED)
+}
+
+func setRoundCorners(hwnd uintptr) {
+	if procDwmSetWindowAttribute.Find() != nil {
+		return
+	}
+	corner := uint32(2)
+	procDwmSetWindowAttribute.Call(hwnd, 33, uintptr(unsafe.Pointer(&corner)), 4)
 }
 
 func tryDwmSetWindowAttribute(hwnd uintptr, attr, value, size uintptr) {
