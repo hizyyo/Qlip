@@ -9,6 +9,7 @@ import (
 var (
 	user32Frame   = syscall.NewLazyDLL("user32.dll")
 	gdi32Frame    = syscall.NewLazyDLL("gdi32.dll")
+	dwmapiFrame   = syscall.NewLazyDLL("dwmapi.dll")
 	procGetWindowLongW    = user32Frame.NewProc("GetWindowLongW")
 	procSetWindowLongW    = user32Frame.NewProc("SetWindowLongW")
 	procSetWindowPos      = user32Frame.NewProc("SetWindowPos")
@@ -18,6 +19,8 @@ var (
 	procCreateRectRgn     = gdi32Frame.NewProc("CreateRectRgn")
 	procInvalidateRect    = user32Frame.NewProc("InvalidateRect")
 	procMoveWindow        = user32Frame.NewProc("MoveWindow")
+	procSetWindowCompositionAttribute = user32Frame.NewProc("SetWindowCompositionAttribute")
+	procDwmExtendFrameIntoClientArea  = dwmapiFrame.NewProc("DwmExtendFrameIntoClientArea")
 )
 
 const (
@@ -91,8 +94,47 @@ func SetFramelessOverlay(title string) {
 		}
 		_ = hRgn
 
+		enableAcrylic(hwnd)
+
 		procShowWindow.Call(hwnd, SW_SHOW)
 	}()
+}
+
+type ACCENTPOLICY struct {
+	AccentState   uint32
+	AccentFlags   uint32
+	GradientColor uint32
+	AnimationID   uint32
+}
+
+type WINCOMPATTRDATA struct {
+	Attribute    int32
+	Data        uintptr
+	DataSize    uint32
+}
+
+func enableAcrylic(hwnd uintptr) {
+	if procSetWindowCompositionAttribute.Find() != nil {
+		return
+	}
+
+	accent := ACCENTPOLICY{
+		AccentState:   4,
+		AccentFlags:   0,
+		GradientColor: 0x22FFFFFF,
+		AnimationID:   0,
+	}
+
+	data := WINCOMPATTRDATA{
+		Attribute:    20,
+		Data:        uintptr(unsafe.Pointer(&accent)),
+		DataSize:    uint32(unsafe.Sizeof(accent)),
+	}
+
+	procSetWindowCompositionAttribute.Call(
+		hwnd,
+		uintptr(unsafe.Pointer(&data)),
+	)
 }
 
 type WindowMover struct {
