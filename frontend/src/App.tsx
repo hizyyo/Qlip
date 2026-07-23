@@ -10,6 +10,12 @@ interface HistoryItem {
   thumbnail?: string
 }
 
+interface SearchResultItem extends HistoryItem {
+  score?: number
+  match_ranges?: [number, number][]
+  match_type?: string
+}
+
 interface Snippet {
   id: number
   title: string
@@ -21,6 +27,7 @@ type Tab = 'all' | 'text' | 'image' | 'favorites' | 'snippets'
 
 export default function App() {
   const [items, setItems] = useState<HistoryItem[]>([])
+const [isSearching, setIsSearching] = useState(false)
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [tab, setTab] = useState<Tab>('all')
   const [query, setQuery] = useState('')
@@ -105,12 +112,13 @@ export default function App() {
 
   const handleSearch = useCallback(async (q: string) => {
     setQuery(q)
+    setIsSearching(!!q.trim())
     if (!q.trim()) {
       fetchHistory(tab === 'favorites' ? 'favorites' : tab === 'text' ? 'text' : tab === 'image' ? 'image' : '')
       return
     }
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=50`)
+      const res = await fetch(`/api/search?mode=fuzzy&q=${encodeURIComponent(q)}&limit=50`)
       const data = await res.json()
       setItems(data)
     } catch {}
@@ -170,6 +178,31 @@ export default function App() {
       fetchSnippets()
     } catch {}
   }, [snippetTitle, snippetContent, fetchSnippets])
+
+  const highlightText = (text: string, ranges?: [number, number][]) => {
+    if (!ranges || ranges.length === 0 || !isSearching) {
+      return <span className="item-content-text">{text}</span>
+    }
+    const segments: { start: number; end: number; highlight: boolean }[] = []
+    let lastEnd = 0
+    for (const [s, e] of ranges) {
+      if (s > lastEnd) segments.push({ start: lastEnd, end: s, highlight: false })
+      segments.push({ start: s, end: e, highlight: true })
+      lastEnd = e
+    }
+    if (lastEnd < text.length) segments.push({ start: lastEnd, end: text.length, highlight: false })
+    return (
+      <span className="item-content-text">
+        {segments.map((seg, i) =>
+          seg.highlight ? (
+            <mark key={i} className="highlight">{text.slice(seg.start, seg.end)}</mark>
+          ) : (
+            <span key={i}>{text.slice(seg.start, seg.end)}</span>
+          )
+        )}
+      </span>
+    )
+  }
 
   const formatTime = (iso: string) => {
     const d = new Date(iso)
@@ -308,7 +341,7 @@ export default function App() {
                     <img src={item.thumbnail} alt="clipboard image" className="item-image-preview" />
                   </div>
                 ) : (
-                  <div className="item-content">{item.content}</div>
+                  <div className="item-content">{highlightText(item.content, (item as SearchResultItem).match_ranges)}</div>
                 )}
                 <div className="item-meta">
                   <span className="item-time">{formatTime(item.created_at)}</span>

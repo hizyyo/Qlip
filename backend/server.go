@@ -72,11 +72,34 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, result)
 }
 
+type SearchResultItem struct {
+	HistoryItem
+	Score       float64  `json:"score"`
+	MatchRanges [][2]int `json:"match_ranges"`
+	MatchType   string   `json:"match_type"`
+}
+
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("q")
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	mode := r.URL.Query().Get("mode")
 	if limit == 0 {
 		limit = 50
+	}
+	if mode == "fuzzy" {
+		results := s.storage.SearchFuzzy(q, limit)
+		out := make([]SearchResultItem, len(results))
+		for i, r := range results {
+			h := toHistoryItem(r.Item, s.imgDir)
+			out[i] = SearchResultItem{
+				HistoryItem: h,
+				Score:       r.Score,
+				MatchRanges: r.MatchRanges,
+				MatchType:   r.MatchType,
+			}
+		}
+		writeJSON(w, out)
+		return
 	}
 	items := s.storage.Search(q, limit)
 	result := make([]HistoryItem, len(items))

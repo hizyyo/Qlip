@@ -202,6 +202,17 @@ body {
   color: #d4d4d8;
 }
 
+.item-content-text {
+  display: inline;
+}
+
+mark.highlight {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
 .item-list, .snippet-list {
   animation: tabFadeIn 0.2s ease-out;
 }

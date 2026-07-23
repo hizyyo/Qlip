@@ -114,6 +114,13 @@ func (s *Storage) GetHistory(limit, offset int, contentType string) []ClipboardI
 	return filtered[offset:end]
 }
 
+type SearchResult struct {
+	Item        ClipboardItem
+	Score       float64
+	MatchRanges [][2]int
+	MatchType   string
+}
+
 func (s *Storage) Search(query string, limit int) []ClipboardItem {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -124,14 +131,108 @@ func (s *Storage) Search(query string, limit int) []ClipboardItem {
 		if len(results) >= limit {
 			break
 		}
-		if contains(item.Content, q) {
+		if substringMatch(item.Content, q) {
 			results = append(results, item)
 		}
 	}
 	return results
 }
 
-func contains(s, substr string) bool {
+func (s *Storage) SearchFuzzy(query string, limit int) []SearchResult {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var results []SearchResult
+
+	for _, item := range s.Items {
+		score, positions := fuzzyScore(query, item.Content)
+		if score > 0 {
+			matchType := "fuzzy"
+			if allWordsMatch(query, item.Content) {
+				score += 100
+				matchType = "word"
+			}
+			if exactMatch(query, item.Content) {
+				score += 200
+				matchType = "exact"
+			}
+			results = append(results, SearchResult{
+				Item:        item,
+				Score:       score,
+				MatchRanges: toRanges(positions),
+				MatchType:   matchType,
+			})
+		}
+	}
+
+	sortByScore(results, limit)
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results
+}
+
+func fuzzyScore(query, text string) (float64, []int) {
+	if query == "" || text == "" {
+		return 0, nil
+	}
+
+	q := toLower(query)
+	t := toLower(text)
+
+	var positions []int
+	qi := 0
+	prevMatch := -5
+	score := 0.0
+	consecutive := 0
+
+	for i := 0; i < len(t) && qi < len(q); i++ {
+		if t[i] == q[qi] {
+			positions = append(positions, i)
+			score += 10.0
+
+			if prevMatch == i-1 {
+				consecutive++
+				score += float64(consecutive) * 5
+			} else {
+				consecutive = 1
+				score -= float64(i - prevMatch - 1) * 0.5
+			}
+			prevMatch = i
+			qi++
+		}
+	}
+
+	if qi < len(q) {
+		return 0, nil
+	}
+
+	firstPos := float64(positions[0])
+	score += (1.0 - firstPos/float64(len(t)+1)) * 50
+
+	coverage := float64(positions[len(positions)-1]-positions[0]+1) / float64(len(t)+1)
+	score += (1.0 - coverage) * 30
+
+	return score, positions
+}
+
+func allWordsMatch(query, text string) bool {
+	q := toLower(query)
+	t := toLower(text)
+	words := splitWords(q)
+	for _, word := range words {
+		if !substringMatch(t, word) {
+			return false
+		}
+	}
+	return len(words) > 0
+}
+
+func exactMatch(query, text string) bool {
+	return toLower(text) == toLower(query)
+}
+
+func substringMatch(s, substr string) bool {
 	if len(s) < len(substr) {
 		return false
 	}
@@ -141,6 +242,71 @@ func contains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func toLower(s string) string {
+	b := make([]byte, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			c += 32
+		}
+		b[i] = c
+	}
+	return string(b)
+}
+
+func splitWords(s string) []string {
+	var words []string
+	start := -1
+	for i := 0; i <= len(s); i++ {
+		if i < len(s) && isAlpha(s[i]) {
+			if start == -1 {
+				start = i
+			}
+		} else {
+			if start != -1 {
+				words = append(words, s[start:i])
+				start = -1
+			}
+		}
+	}
+	return words
+}
+
+func isAlpha(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+}
+
+func toRanges(positions []int) [][2]int {
+	if len(positions) == 0 {
+		return nil
+	}
+	var ranges [][2]int
+	start := positions[0]
+	end := positions[0] + 1
+
+	for i := 1; i < len(positions); i++ {
+		if positions[i] == positions[i-1]+1 {
+			end = positions[i] + 1
+		} else {
+			ranges = append(ranges, [2]int{start, end})
+			start = positions[i]
+			end = positions[i] + 1
+		}
+	}
+	ranges = append(ranges, [2]int{start, end})
+	return ranges
+}
+
+func sortByScore(results []SearchResult, limit int) {
+	for i := 0; i < len(results)-1; i++ {
+		for j := i + 1; j < len(results); j++ {
+			if results[j].Score > results[i].Score {
+				results[i], results[j] = results[j], results[i]
+			}
+		}
+	}
 }
 
 func (s *Storage) ToggleFavorite(id int64) bool {
