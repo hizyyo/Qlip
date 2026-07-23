@@ -79,15 +79,19 @@ func main() {
 	toggle := backend.NewToggle(hwnd)
 	mover := backend.NewWindowMover(hwnd)
 
-	if err := w.Bind("__toggle", toggle.Toggle); err != nil {
+	if err := w.Bind("__toggle", toggle.AnimatedToggle); err != nil {
 		log.Printf("Bind failed: %v", err)
 	}
 	if err := w.Bind("__moveWindow", mover.Move); err != nil {
 		log.Printf("Bind window move failed: %v", err)
 	}
 
+	if err := w.Bind("__hideNow", toggle.Hide); err != nil {
+		log.Printf("Bind failed: %v", err)
+	}
+
 	hk := backend.NewHotkey(func() {
-		toggle.Toggle()
+		toggle.AnimatedToggle()
 	})
 	if err := hk.Register(backend.MOD_ALT, 0x56); err != nil {
 		log.Printf("Hotkey registration failed: %v", err)
