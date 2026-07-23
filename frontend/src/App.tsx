@@ -56,18 +56,13 @@ export default function App() {
     searchRef.current?.focus()
   }, [])
 
-  const dragRef = useRef({ dragging: false, startX: 0, startY: 0, winX: 0, winY: 0 })
+  const dragRef = useRef({ dragging: false, startX: 0, startY: 0 })
 
   const onHeaderMouseDown = useCallback((e: React.MouseEvent) => {
     const drag = dragRef.current
     drag.dragging = true
     drag.startX = e.screenX
     drag.startY = e.screenY
-    if ((window as any).__getWindowPos) {
-      const p = (window as any).__getWindowPos()
-      drag.winX = p.x
-      drag.winY = p.y
-    }
   }, [])
 
   useEffect(() => {
@@ -76,18 +71,16 @@ export default function App() {
       if (!drag.dragging) return
       const dx = e.screenX - drag.startX
       const dy = e.screenY - drag.startY
-      if ((window as any).__moveWindow) {
-        ;(window as any).__moveWindow(drag.winX + dx, drag.winY + dy)
+      if ((window as any).__moveBy) {
+        ;(window as any).__moveBy(dx, dy)
       }
     }
     const onMouseUp = (e: MouseEvent) => {
       const drag = dragRef.current
       if (!drag.dragging) return
       drag.dragging = false
-      const dx = e.screenX - drag.startX
-      const dy = e.screenY - drag.startY
-      drag.winX += dx
-      drag.winY += dy
+      drag.startX = e.screenX
+      drag.startY = e.screenY
     }
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)

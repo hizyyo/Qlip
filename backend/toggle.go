@@ -26,7 +26,6 @@ const (
 	animSteps  = 24
 	animDelay  = 10 * time.Millisecond
 	pillW = 64
-	pillH = 36
 	bottomMargin = 40
 )
 
@@ -86,9 +85,9 @@ func (t *Toggle) AnimatedToggle() {
 	}
 }
 
-func (t *Toggle) pillPos() (int, int) {
+func (t *Toggle) geniePos() (int, int, int, int) {
 	sw, sh := getScreenSize()
-	return sw/2 - pillW/2, sh - pillH - bottomMargin
+	return sw/2 - pillW/2, sh, pillW, 0
 }
 
 func (t *Toggle) animatedHide() {
@@ -97,18 +96,15 @@ func (t *Toggle) animatedHide() {
 	}
 
 	x, y, w, h := getWindowRect(t.hwnd)
-	targetX, targetY := t.pillPos()
+	tx, ty, tw, th := t.geniePos()
 
 	for i := 1; i <= animSteps; i++ {
-		p := float64(i) / animSteps
-		e := easeInOutCubic(p)
-		cx := lerp(x, targetX, e)
-		cy := lerp(y, targetY, e)
-		cw := lerp(w, pillW, e)
-		ch := lerp(h, pillH, e)
+		e := easeInOutCubic(float64(i) / animSteps)
 		procSetWindowPos.Call(t.hwnd, 0,
-			uintptr(cx), uintptr(cy),
-			uintptr(cw), uintptr(ch),
+			uintptr(lerp(x, tx, e)),
+			uintptr(lerp(y, ty, e)),
+			uintptr(lerp(w, tw, e)),
+			uintptr(lerp(h, th, e)),
 			SWP_NOZORDER|SWP_NOACTIVATE)
 		time.Sleep(animDelay)
 	}
@@ -117,7 +113,7 @@ func (t *Toggle) animatedHide() {
 	procSetWindowPos.Call(t.hwnd, HWND_TOPMOST,
 		uintptr(t.fullX), uintptr(t.fullY),
 		uintptr(t.fullW), uintptr(t.fullH),
-		SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE)
+		SWP_NOACTIVATE)
 }
 
 func (t *Toggle) animatedShow() {
@@ -125,26 +121,23 @@ func (t *Toggle) animatedShow() {
 		return
 	}
 
-	startX, startY := t.pillPos()
+	sx, sy, sw, sht := t.geniePos()
 
 	procShowWindow.Call(t.hwnd, SW_SHOW)
 	procSetWindowPos.Call(t.hwnd, HWND_TOPMOST,
-		uintptr(startX), uintptr(startY),
-		uintptr(pillW), uintptr(pillH),
+		uintptr(sx), uintptr(sy),
+		uintptr(sw), uintptr(sht),
 		SWP_NOACTIVATE)
 
 	time.Sleep(30 * time.Millisecond)
 
 	for i := 1; i <= animSteps; i++ {
-		p := float64(i) / animSteps
-		e := easeInOutCubic(p)
-		cx := lerp(startX, t.fullX, e)
-		cy := lerp(startY, t.fullY, e)
-		cw := lerp(pillW, t.fullW, e)
-		ch := lerp(pillH, t.fullH, e)
+		e := easeInOutCubic(float64(i) / animSteps)
 		procSetWindowPos.Call(t.hwnd, 0,
-			uintptr(cx), uintptr(cy),
-			uintptr(cw), uintptr(ch),
+			uintptr(lerp(sx, t.fullX, e)),
+			uintptr(lerp(sy, t.fullY, e)),
+			uintptr(lerp(sw, t.fullW, e)),
+			uintptr(lerp(sht, t.fullH, e)),
 			SWP_NOZORDER|SWP_NOACTIVATE)
 		time.Sleep(animDelay)
 	}

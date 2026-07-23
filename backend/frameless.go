@@ -179,22 +179,15 @@ func NewWindowMover(hwnd uintptr) *WindowMover {
 	return &WindowMover{hwnd: hwnd}
 }
 
-func (wm *WindowMover) Move(x, y int) {
+func (wm *WindowMover) MoveBy(dx, dy int) {
 	if wm.hwnd == 0 {
 		return
 	}
 	var r RECT
 	procGetWindowRect.Call(wm.hwnd, uintptr(unsafe.Pointer(&r)))
+	x := int(r.left) + dx
+	y := int(r.top) + dy
 	w := uintptr(r.right - r.left)
 	h := uintptr(r.bottom - r.top)
 	procMoveWindow.Call(wm.hwnd, uintptr(x), uintptr(y), w, h, 1)
-}
-
-func (wm *WindowMover) GetPos() map[string]int {
-	if wm.hwnd == 0 {
-		return map[string]int{"x": 0, "y": 0}
-	}
-	var r RECT
-	procGetWindowRect.Call(wm.hwnd, uintptr(unsafe.Pointer(&r)))
-	return map[string]int{"x": int(r.left), "y": int(r.top)}
 }
